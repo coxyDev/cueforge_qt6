@@ -1,5 +1,22 @@
-# Prerequisites
-*.d
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.autosave
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Makefile
 
 # Compiled Object files
 *.slo
@@ -30,3 +47,96 @@
 *.exe
 *.out
 *.app
+CueForge
+bin/
+lib/
+
+# Qt
+*.qm
+*.qrc.depends
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+DerivedData/
+build/
+
+# Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sdf
+*.opensdf
+*.suo
+*.user
+*.aps
+*.pch
+*.vspscc
+*.vssscc
+*.ncb
+*.bak
+*.tmp
+ipch/
+Debug/
+Release/
+x64/
+Win32/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# User-specific files
+workspace.cueforge
+*.cueforge~
+user-settings.json
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# Package managers
+node_modules/
+.npm
+.yarn/
+
+# Misc
+*.swp
+*~
+.*.swp
+.*.swo

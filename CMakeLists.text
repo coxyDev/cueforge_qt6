@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(CueForge 
+    VERSION 2.0.0
+    DESCRIPTION "Professional show control software"
+    LANGUAGES CXX
+)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS
+    Core Gui Widgets Network Multimedia SerialPort
+)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+set(CUEFORGE_SOURCES
+    src/main.cpp
+    src/core/Cue.cpp
+    src/core/CueManager.cpp
+    src/core/ErrorHandler.cpp
+    src/core/cues/AudioCue.cpp
+    src/core/cues/GroupCue.cpp
+    src/core/cues/WaitCue.cpp
+    src/core/cues/ControlCue.cpp
+)
+
+add_executable(CueForge ${CUEFORGE_SOURCES})
+
+target_include_directories(CueForge PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+target_link_libraries(CueForge PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::SerialPort
+)
+
+if(MSVC)
+    target_compile_options(CueForge PRIVATE /W4)
+else()
+    target_compile_options(CueForge PRIVATE -Wall -Wextra)
+endif()
