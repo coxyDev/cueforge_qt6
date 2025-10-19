@@ -34,6 +34,7 @@ namespace CueForge {
         Cue* getChildAt(int index) const;
         int childCount() const { return children_.size(); }
         void clearChildren();
+        Cue::CuePtr removeChild(int index);
 
         GroupMode mode() const { return mode_; }
         void setMode(GroupMode mode);

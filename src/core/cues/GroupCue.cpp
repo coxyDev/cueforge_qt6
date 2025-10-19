@@ -5,6 +5,7 @@
 
 #include "GroupCue.h"
 #include <QDebug>
+#include <QJsonArray>
 #include <algorithm>
 
 namespace CueForge {
@@ -45,21 +46,19 @@ namespace CueForge {
         emit childCountChanged(children_.size());
     }
 
-    bool GroupCue::removeChild(const QString& cueId)
+    Cue::CuePtr GroupCue::removeChild(int index)
     {
-        auto it = std::find_if(children_.begin(), children_.end(),
-            [&cueId](const CuePtr& cue) { return cue->id() == cueId; });
-
-        if (it == children_.end()) {
-            return false;
+        if (index < 0 || index >= children_.size()) {
+            return Cue::CuePtr();  // Return empty shared_ptr
         }
 
-        children_.erase(it);
-        setDuration(totalDuration());
-        updateModifiedTime();
-        emit childCountChanged(children_.size());
+        Cue::CuePtr child = children_.takeAt(index);
 
-        return true;
+        if (child) {
+            child->setParent(nullptr);
+        }
+
+        return child;
     }
 
     Cue* GroupCue::getChild(const QString& cueId) const

@@ -1,105 +1,88 @@
 // ============================================================================
-// CueManager.h - Central cue management system
+// CueManager.h - Central cue management and workspace control
 // CueForge Qt6 - Professional show control software
 // ============================================================================
 
 #pragma once
 
-#include "Cue.h"
 #include <QObject>
+#include <QString>
+#include <QStringList>
 #include <QList>
-#include <QSet>
+#include <QPointer>
 #include <QJsonObject>
-#include <QJsonArray>
+#include <memory>
+#include "Cue.h"
 
 namespace CueForge {
+
+    class ErrorHandler;
 
     class CueManager : public QObject
     {
         Q_OBJECT
-            Q_PROPERTY(int cueCount READ cueCount NOTIFY cueCountChanged)
-            Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
-            Q_PROPERTY(bool hasUnsavedChanges READ hasUnsavedChanges NOTIFY unsavedChangesChanged)
 
     public:
+        using CueList = QList<Cue::CuePtr>;
+
         explicit CueManager(QObject* parent = nullptr);
-        ~CueManager() override;
+        ~CueManager() override = default;
 
-        // ========== Cue Lifecycle ==========
-
+        // Cue creation and management
         Cue* createCue(CueType type, int index = -1);
+        Cue::CuePtr removeChild(int index);
         bool removeCue(const QString& cueId);
-        void removeAllCues();
-        Cue* duplicateCue(const QString& cueId);
-        bool renameCue(const QString& cueId, const QString& newNumber);
-        void renumberAllCues();
-
-        // ========== Cue Access ==========
-
+        void removeCueWithoutSignals(const QString& cueId);
         Cue* getCue(const QString& cueId) const;
-        Cue* getCueByNumber(const QString& number) const;
         int getCueIndex(const QString& cueId) const;
-        Cue::CueList allCues() const { return cues_; }
-        int cueCount() const { return cues_.size(); }
-
-        // ========== Selection System ==========
-
-        QStringList selectedCueIds() const { return selectedCueIds_; }
-        Cue::CueList selectedCues() const;
-        int selectedCount() const { return selectedCueIds_.size(); }
-        bool isCueSelected(const QString& cueId) const;
-
-        void selectCue(const QString& cueId, bool clearOthers = true);
-        void addToSelection(const QString& cueId);
-        void removeFromSelection(const QString& cueId);
-        void toggleSelection(const QString& cueId);
-        void selectRange(const QString& startId, const QString& endId);
-        void selectAll();
-        void clearSelection();
-
-        // ========== Group Management ==========
-
-        Cue* createGroupFromSelection(const QString& groupName = "Group");
-        bool ungroupCue(const QString& groupId);
-        bool isGroupExpanded(const QString& groupId) const;
-        void setGroupExpanded(const QString& groupId, bool expanded);
-
-        // ========== Cue Ordering ==========
-
         bool moveCue(const QString& cueId, int newIndex);
         bool moveCueUp(const QString& cueId);
         bool moveCueDown(const QString& cueId);
+        Cue* duplicateCue(const QString& cueId);
 
-        // ========== Playback Control ==========
+        // Standby and playback
+        Cue* standByCue() const;
+        void setStandByCue(const QString& cueId);
+        void setStandByCue(Cue* cue);
+        QStringList activeCueIds() const;
 
         bool go();
         void stop();
-        void stopCue(const QString& cueId, double fadeTime = 0.0);
         void pause();
         void panic();
-        QStringList activeCueIds() const;
-
-        // ========== Standby System (Playhead) ==========
-
-        void setStandByCue(const QString& cueId);
-        Cue* standByCue() const;
-        void nextCue();
         void previousCue();
+        void nextCue();
 
-        // ========== Workspace Management ==========
+        // Group operations
+        Cue* createGroupFromSelection(const QString& groupName = "Group");
+        bool ungroupCue(const QString& groupCueId);
 
-        void newWorkspace();
-        bool loadWorkspace(const QJsonObject& json);
-        QJsonObject saveWorkspace() const;
-        bool hasUnsavedChanges() const { return hasUnsavedChanges_; }
-        void markSaved();
-        void markUnsaved();
+        // Selection
+        void selectCue(const QString& cueId);
+        void addToSelection(const QString& cueId);
+        void removeFromSelection(const QString& cueId);
+        void clearSelection();
+        void selectAll();
+        QStringList selectedCueIds() const { return selectedCueIds_; }
+        int selectedCount() const { return selectedCueIds_.size(); }
 
-        // ========== Clipboard Operations ==========
-
+        // Clipboard
         void copy();
         void cut();
         void paste(int index = -1);
+
+        // Workspace management
+        void newWorkspace();
+        bool loadWorkspace(const QJsonObject& workspace);
+        QJsonObject saveWorkspace() const;
+        void markSaved();
+        void markUnsaved();
+        bool hasUnsavedChanges() const { return hasUnsavedChanges_; }
+
+        // Queries
+        const CueList& allCues() const { return cues_; }
+        int cueCount() const { return cues_.size(); }
+        void renumberAllCues();
 
     signals:
         void cueAdded(Cue* cue, int index);
@@ -109,42 +92,23 @@ namespace CueForge {
         void cueCountChanged(int count);
 
         void selectionChanged();
-        void selectionCleared();
-
-        void playbackStarted(const QString& cueId);
-        void playbackStopped(const QString& cueId);
+        void standByCueChanged(const QString& cueId);
         void playbackStateChanged();
 
-        void standByCueChanged(const QString& cueId);
-
-        void workspaceLoaded();
         void workspaceCleared();
         void unsavedChangesChanged(bool hasChanges);
 
         void error(const QString& message);
         void warning(const QString& message);
-
-    private slots:
-        void onCueFinished(const QString& cueId);
-        void onCueStatusChanged(Cue* cue);
+        void info(const QString& message);
 
     private:
-        void connectCueSignals(Cue* cue);
-        void disconnectCueSignals(Cue* cue);
-        void executeCue(Cue* cue);
-        bool canExecuteCue(Cue* cue) const;
-        void advanceStandBy();
-        QString generateCueNumber() const;
-        bool validateCueOperation(const QString& operation, const QString& cueId) const;
-        bool validateGroupOperation(const QString& groupId) const;
-
-        Cue::CueList cues_;
+        CueList cues_;
         QStringList selectedCueIds_;
-        QSet<QString> activeCues_;
-        QSet<QString> expandedGroups_;
-        QString standByCueId_;
+        QStringList activeCueIds_;
+        QPointer<Cue> standByCue_;
         QList<QJsonObject> clipboard_;
-        bool isPaused_;
+        QString currentWorkspacePath_;
         bool hasUnsavedChanges_;
     };
 
