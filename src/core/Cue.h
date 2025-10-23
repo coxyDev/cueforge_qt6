@@ -40,9 +40,11 @@ namespace CueForge {
     };
 
     enum class CueStatus {
+        Idle,
         Loaded,
         Running,
         Paused,
+        Stopped,
         Finished,
         Broken
     };
@@ -117,7 +119,7 @@ namespace CueForge {
 
         // ========== Execution Interface ==========
 
-        virtual bool execute() = 0;
+        virtual bool execute();
         virtual void stop(double fadeTime = 0.0);
         virtual void pause();
         virtual void resume();

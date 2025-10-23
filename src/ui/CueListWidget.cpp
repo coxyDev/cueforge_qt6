@@ -92,6 +92,7 @@ namespace CueForge {
         QTreeView::item {
             padding: 4px;
             border: none;
+            height: 28px;
         }
         
         QTreeView::item:selected {
@@ -109,14 +110,28 @@ namespace CueForge {
         
         QTreeView::branch:has-children:!has-siblings:closed,
         QTreeView::branch:closed:has-children:has-siblings {
-            image: url(none);
             border-image: none;
+            image: none;
         }
         
         QTreeView::branch:open:has-children:!has-siblings,
         QTreeView::branch:open:has-children:has-siblings {
-            image: url(none);
             border-image: none;
+            image: none;
+        }
+        
+        QTreeView::branch:has-children:!has-siblings:closed::before,
+        QTreeView::branch:closed:has-children:has-siblings::before {
+            content: "▶";
+            color: #888;
+            font-size: 10pt;
+        }
+        
+        QTreeView::branch:open:has-children:!has-siblings::before,
+        QTreeView::branch:open:has-children:has-siblings::before {
+            content: "▼";
+            color: #888;
+            font-size: 10pt;
         }
         
         QHeaderView::section {

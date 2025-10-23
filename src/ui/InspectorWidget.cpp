@@ -6,6 +6,7 @@
 #include "InspectorWidget.h"
 #include "../core/CueManager.h"
 #include "../core/Cue.h"
+#include "../core/cues/AudioCue.h"
 
 #include <QFormLayout>
 #include <QVBoxLayout>
@@ -18,6 +19,7 @@
 #include <QLabel>
 #include <QGroupBox>
 #include <QColorDialog>
+#include <QFileDialog>
 
 namespace CueForge {
 
@@ -88,6 +90,31 @@ namespace CueForge {
 
         layout->addWidget(basicGroup_);
 
+        audioCueGroup_ = new QGroupBox(tr("Audio Properties"), this);
+        QFormLayout* audioLayout = new QFormLayout(audioCueGroup_);
+
+        // File path with browse button
+        QHBoxLayout* fileLayout = new QHBoxLayout();
+        editFilePath_ = new QLineEdit(this);
+        editFilePath_->setPlaceholderText(tr("No file selected"));
+        editFilePath_->setReadOnly(true);
+        btnBrowseFile_ = new QPushButton(tr("Browse..."), this);
+        btnBrowseFile_->setMaximumWidth(100);
+        fileLayout->addWidget(editFilePath_);
+        fileLayout->addWidget(btnBrowseFile_);
+        audioLayout->addRow(tr("Audio File:"), fileLayout);
+
+        // Volume control
+        spinVolume_ = new QDoubleSpinBox(this);
+        spinVolume_->setRange(0.0, 1.0);
+        spinVolume_->setSingleStep(0.1);
+        spinVolume_->setDecimals(2);
+        spinVolume_->setValue(1.0);
+        audioLayout->addRow(tr("Volume:"), spinVolume_);
+
+        audioCueGroup_->setVisible(false); // Hidden by default
+        layout->addWidget(audioCueGroup_);
+
         // Status Group
         statusGroup_ = new QGroupBox(tr("Status"), this);
         QFormLayout* statusLayout = new QFormLayout(statusGroup_);
@@ -135,6 +162,35 @@ namespace CueForge {
             this, &InspectorWidget::applyChangesToCue);
         connect(checkArmed_, &QCheckBox::toggled,
             this, &InspectorWidget::applyChangesToCue);
+
+        connect(btnBrowseFile_, &QPushButton::clicked, this, [this]() {
+            if (!currentCue_ || currentCue_->type() != CueType::Audio) {
+                return;
+            }
+
+            QString fileName = QFileDialog::getOpenFileName(
+                this,
+                tr("Select Audio File"),
+                QString(),
+                tr("Audio Files (*.wav *.mp3 *.flac *.ogg *.aac *.m4a);;All Files (*.*)")
+            );
+
+            if (!fileName.isEmpty()) {
+                AudioCue* audioCue = static_cast<AudioCue*>(currentCue_.data());
+                audioCue->setFilePath(fileName);
+                editFilePath_->setText(fileName);
+            }
+            });
+
+        // ADD THIS - Volume connection
+        connect(spinVolume_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double value) {
+                if (!currentCue_ || currentCue_->type() != CueType::Audio || updatingFromCue_) {
+                    return;
+                }
+                AudioCue* audioCue = static_cast<AudioCue*>(currentCue_.data());
+                audioCue->setVolume(value);
+            });
     }
 
     void InspectorWidget::applyStyleSheet()
@@ -290,6 +346,16 @@ namespace CueForge {
         labelId_->setText(cue->id());
         checkArmed_->setChecked(cue->isArmed());
 
+        if (cue->type() == CueType::Audio) {
+            AudioCue* audioCue = static_cast<AudioCue*>(cue);
+            editFilePath_->setText(audioCue->filePath());
+            spinVolume_->setValue(audioCue->volume());
+            audioCueGroup_->setVisible(true);
+        }
+        else {
+            audioCueGroup_->setVisible(false);
+        }
+
         updatingFromCue_ = false;
     }
 
@@ -321,6 +387,7 @@ namespace CueForge {
         basicGroup_->setTitle(tr("Basic Properties"));
         basicGroup_->setEnabled(false);
         statusGroup_->setEnabled(false);
+        audioCueGroup_->setVisible(false);
 
         editNumber_->clear();
         editName_->clear();

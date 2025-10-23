@@ -46,6 +46,7 @@ namespace CueForge {
         void clearInspector();
         void showMultipleSelection(int count);
         void showSingleCue(Cue* cue);
+        void setupAudioCueWidgets();
 
         QPointer<CueManager> cueManager_;
         QPointer<Cue> currentCue_;
@@ -60,6 +61,11 @@ namespace CueForge {
         QCheckBox* checkContinue_;
         QPushButton* btnColor_;
         QTextEdit* editNotes_;
+
+        QGroupBox* audioCueGroup_;
+        QLineEdit* editFilePath_;
+        QPushButton* btnBrowseFile_;
+        QDoubleSpinBox* spinVolume_;
 
         QGroupBox* statusGroup_;
         QLabel* labelType_;

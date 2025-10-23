@@ -11,6 +11,7 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <algorithm>
+#include <QPair>
 
 namespace CueForge {
 
@@ -479,30 +480,47 @@ bool CueManager::ungroupCue(const QString& groupCueId)
     GroupCue* group = static_cast<GroupCue*>(cue);
     int groupIndex = getCueIndex(groupCueId);
 
-    // Extract all children
-    int childCount = group->childCount();
-    QList<Cue::CuePtr> children;
+    if (groupIndex < 0) {
+        return false;
+    }
 
-    // Remove children in reverse to maintain indices
-    for (int i = childCount - 1; i >= 0; --i) {
-        Cue::CuePtr childPtr = group->removeChild(i);
-        if (childPtr) {
-            children.prepend(childPtr);  // prepend since we're going backwards
+    // Get all children first (before modifying anything)
+    QList<Cue::CuePtr> children;
+    int childCount = group->childCount();
+
+    for (int i = 0; i < childCount; ++i) {
+        Cue* child = group->getChildAt(i);
+        if (child) {
+            // Create a new shared_ptr that shares ownership
+            children.append(Cue::CuePtr(child, [](Cue*) {})); // Empty deleter, ownership stays with group temporarily
         }
     }
 
-    // Insert children at group position
-    for (int i = 0; i < children.size(); ++i) {
-        cues_.insert(groupIndex + i + 1, children[i]);
+    // Now we need to properly transfer ownership
+    // First, remove the group (this will trigger model update)
+    // But keep children alive by temporarily storing shared_ptrs
+    QList<Cue::CuePtr> childrenToInsert;
+    for (int i = childCount - 1; i >= 0; --i) {
+        Cue::CuePtr childPtr = group->removeChild(i);
+        if (childPtr) {
+            childrenToInsert.prepend(childPtr);
+        }
     }
 
-    // Remove the now-empty group
-    removeCue(groupCueId);
+    // Now remove the empty group
+    emit cueRemoved(groupCueId);  // Signal FIRST
+    cues_.removeAt(groupIndex);   // Then remove
+
+    // Insert all children at the old group position
+    for (int i = 0; i < childrenToInsert.size(); ++i) {
+        cues_.insert(groupIndex + i, childrenToInsert[i]);
+        emit cueAdded(childrenToInsert[i].get(), groupIndex + i);
+    }
 
     markUnsaved();
     renumberAllCues();
 
-    qDebug() << "Ungrouped:" << groupCueId << "with" << children.size() << "children";
+    qDebug() << "Ungrouped:" << groupCueId << "with" << childrenToInsert.size() << "children";
     return true;
 }
 
@@ -675,29 +693,83 @@ void CueManager::newWorkspace()
 bool CueManager::loadWorkspace(const QJsonObject& workspace)
 {
     newWorkspace();
-    
+
     QJsonArray cuesArray = workspace["cues"].toArray();
-    
+
+    // PASS 1: Create all cues (but don't load children yet)
+    QList<QPair<Cue*, QJsonObject>> cuesToProcess;
+
     for (const QJsonValue& value : cuesArray) {
         QJsonObject cueObj = value.toObject();
         QString typeStr = cueObj["type"].toString();
         CueType type = stringToCueType(typeStr);
-        
+
         Cue* cue = createCue(type);
         if (cue) {
+            // Load basic properties only (not children)
             cue->fromJson(cueObj);
+
+            // Store for second pass if it's a group
+            if (type == CueType::Group) {
+                cuesToProcess.append(qMakePair(cue, cueObj));
+            }
         }
     }
-    
+
+    // PASS 2: Now load group children
+    for (const auto& pair : cuesToProcess) {
+        Cue* groupCue = pair.first;
+        QJsonObject groupObj = pair.second;
+
+        if (groupCue->type() == CueType::Group) {
+            GroupCue* group = static_cast<GroupCue*>(groupCue);
+            QJsonArray childrenArray = groupObj["children"].toArray();
+
+            for (const QJsonValue& childValue : childrenArray) {
+                QJsonObject childObj = childValue.toObject();
+                QString childTypeStr = childObj["type"].toString();
+                CueType childType = stringToCueType(childTypeStr);
+
+                // Create child cue (but don't add to main list)
+                Cue* childCue = nullptr;
+
+                switch (childType) {
+                case CueType::Audio:
+                    childCue = new AudioCue(this);
+                    break;
+                case CueType::Group:
+                    childCue = new GroupCue(this);
+                    break;
+                case CueType::Wait:
+                    childCue = new WaitCue(this);
+                    break;
+                case CueType::Start:
+                case CueType::Stop:
+                case CueType::Pause:
+                case CueType::Goto:
+                    childCue = new ControlCue(childType, this);
+                    break;
+                default:
+                    break;
+                }
+
+                if (childCue) {
+                    childCue->fromJson(childObj);
+                    group->addChild(Cue::CuePtr(childCue));
+                }
+            }
+        }
+    }
+
     // Restore standby cue if saved
     QString standbyCueId = workspace["standbyCue"].toString();
     if (!standbyCueId.isEmpty()) {
         setStandByCue(standbyCueId);
     }
-    
+
     hasUnsavedChanges_ = false;
     emit unsavedChangesChanged(false);
-    
+
     qDebug() << "Loaded workspace with" << cues_.size() << "cues";
     return true;
 }

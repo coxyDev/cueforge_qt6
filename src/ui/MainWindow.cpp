@@ -22,6 +22,7 @@
 #include <QApplication>
 #include <QJsonDocument>
 #include <QFile>
+#include <QInputDialog>
 
 namespace CueForge {
 
@@ -571,15 +572,38 @@ namespace CueForge {
 
     void MainWindow::onGroupSelection()
     {
-        if (cueManager_->selectedCount() < 2) {
-            QMessageBox::information(this, tr("Group Cues"),
-                tr("Please select at least 2 cues to group."));
+        if (!cueManager_) return;
+
+        QStringList selected = cueManager_->selectedCueIds();
+
+        if (selected.isEmpty()) {
+            statusLabel_->setText(tr("No cues selected to group"));
             return;
         }
 
-        Cue* group = cueManager_->createGroupFromSelection("Group");
-        if (group) {
-            statusLabel_->setText(tr("Created group with %1 cues").arg(cueManager_->selectedCount()));
+        if (selected.size() < 2) {
+            statusLabel_->setText(tr("Select at least 2 cues to create a group"));
+            return;
+        }
+
+        bool ok;
+        QString groupName = QInputDialog::getText(
+            this,
+            tr("Create Group"),
+            tr("Group name:"),
+            QLineEdit::Normal,
+            tr("Group"),
+            &ok
+        );
+
+        if (ok && !groupName.isEmpty()) {
+            Cue* group = cueManager_->createGroupFromSelection(groupName);
+            if (group) {
+                statusLabel_->setText(tr("Created group: %1").arg(groupName));
+            }
+            else {
+                statusLabel_->setText(tr("Failed to create group"));
+            }
         }
     }
 

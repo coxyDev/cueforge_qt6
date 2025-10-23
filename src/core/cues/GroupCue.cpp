@@ -1,166 +1,70 @@
 // ============================================================================
-// GroupCue.cpp - Hierarchical cue grouping implementation
+// GroupCue.cpp - Container cue implementation
 // CueForge Qt6 - Professional show control software
 // ============================================================================
 
 #include "GroupCue.h"
-#include <QDebug>
 #include <QJsonArray>
-#include <algorithm>
+#include <QDebug>
 
 namespace CueForge {
 
     GroupCue::GroupCue(QObject* parent)
         : Cue(CueType::Group, parent)
         , mode_(GroupMode::Sequential)
-        , currentChildIndex_(-1)
     {
         setName("Group");
-        setColor(QColor(150, 150, 150));
-    }
-
-    void GroupCue::setChildren(const CueList& children)
-    {
-        children_ = children;
-        setDuration(totalDuration());
-        emit childCountChanged(children_.size());
-    }
-
-    void GroupCue::addChild(CuePtr cue, int index)
-    {
-        if (!cue) {
-            return;
-        }
-
-        cue->setParent(this);
-
-        if (index < 0 || index >= children_.size()) {
-            children_.append(cue);
-        }
-        else {
-            children_.insert(index, cue);
-        }
-
-        setDuration(totalDuration());
-        updateModifiedTime();
-        emit childCountChanged(children_.size());
-    }
-
-    Cue::CuePtr GroupCue::removeChild(int index)
-    {
-        if (index < 0 || index >= children_.size()) {
-            return Cue::CuePtr();  // Return empty shared_ptr
-        }
-
-        Cue::CuePtr child = children_.takeAt(index);
-
-        if (child) {
-            child->setParent(nullptr);
-        }
-
-        return child;
-    }
-
-    Cue* GroupCue::getChild(const QString& cueId) const
-    {
-        auto it = std::find_if(children_.begin(), children_.end(),
-            [&cueId](const CuePtr& cue) { return cue->id() == cueId; });
-
-        return (it != children_.end()) ? it->get() : nullptr;
-    }
-
-    Cue* GroupCue::getChildAt(int index) const
-    {
-        if (index >= 0 && index < children_.size()) {
-            return children_[index].get();
-        }
-        return nullptr;
-    }
-
-    void GroupCue::clearChildren()
-    {
-        children_.clear();
-        setDuration(0.0);
-        emit childCountChanged(0);
-    }
-
-    void GroupCue::setMode(GroupMode mode)
-    {
-        if (mode_ != mode) {
-            mode_ = mode;
-            setDuration(totalDuration());
-            updateModifiedTime();
-            emit modeChanged(mode);
-        }
-    }
-
-    double GroupCue::totalDuration() const
-    {
-        if (children_.isEmpty()) {
-            return 0.0;
-        }
-
-        if (mode_ == GroupMode::Sequential) {
-            double total = 0.0;
-            for (const auto& child : children_) {
-                total += child->preWait() + child->duration() + child->postWait();
-            }
-            return total;
-        }
-        else {
-            double maxDuration = 0.0;
-            for (const auto& child : children_) {
-                double childTotal = child->preWait() + child->duration() + child->postWait();
-                maxDuration = qMax(maxDuration, childTotal);
-            }
-            return maxDuration;
-        }
+        setColor(QColor(100, 149, 237)); // Cornflower blue
     }
 
     bool GroupCue::execute()
     {
-        if (!canExecute()) {
+        if (status() == CueStatus::Running) {
             return false;
         }
 
         setStatus(CueStatus::Running);
-        currentChildIndex_ = -1;
-        activeChildren_.clear();
 
         if (mode_ == GroupMode::Sequential) {
-            executeNextChild();
+            // Execute first child, rest will follow via continue mode
+            if (!children_.isEmpty() && children_.first()) {
+                children_.first()->execute();
+            }
         }
         else {
-            executeAllChildren();
+            // Execute all children simultaneously
+            for (auto& child : children_) {
+                if (child) {
+                    child->execute();
+                }
+            }
         }
-
-        qDebug() << "GroupCue execute:" << name() << "mode:" << (int)mode_
-            << "children:" << children_.size();
 
         return true;
     }
 
-    void GroupCue::stop(double fadeTime)
+    void GroupCue::stop()
     {
-        for (const QString& childId : activeChildren_) {
-            Cue* child = getChild(childId);
-            if (child) {
-                child->stop(fadeTime);
+        // Stop all children
+        for (auto& child : children_) {
+            if (child && (child->status() == CueStatus::Running ||
+                child->status() == CueStatus::Paused)) {
+                child->stop();
             }
         }
 
-        activeChildren_.clear();
-        currentChildIndex_ = -1;
-        setStatus(CueStatus::Loaded);
-
-        qDebug() << "GroupCue stopped:" << name();
+        setStatus(CueStatus::Idle);  // CHANGED: Back to Idle, not Stopped
     }
 
     void GroupCue::pause()
     {
-        for (const QString& childId : activeChildren_) {
-            Cue* child = getChild(childId);
-            if (child) {
+        if (status() != CueStatus::Running) {
+            return;
+        }
+
+        // Pause all running children
+        for (auto& child : children_) {
+            if (child && child->status() == CueStatus::Running) {
                 child->pause();
             }
         }
@@ -170,9 +74,13 @@ namespace CueForge {
 
     void GroupCue::resume()
     {
-        for (const QString& childId : activeChildren_) {
-            Cue* child = getChild(childId);
-            if (child) {
+        if (status() != CueStatus::Paused) {
+            return;
+        }
+
+        // Resume all paused children
+        for (auto& child : children_) {
+            if (child && child->status() == CueStatus::Paused) {
                 child->resume();
             }
         }
@@ -180,68 +88,20 @@ namespace CueForge {
         setStatus(CueStatus::Running);
     }
 
-    bool GroupCue::canExecute() const
-    {
-        if (!Cue::canExecute()) {
-            return false;
-        }
-
-        for (const auto& child : children_) {
-            if (child->canExecute()) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool GroupCue::validate()
-    {
-        if (children_.isEmpty()) {
-            return false;
-        }
-
-        bool allValid = true;
-        for (const auto& child : children_) {
-            if (!child->validate()) {
-                allValid = false;
-            }
-        }
-
-        return allValid;
-    }
-
-    QString GroupCue::validationError() const
-    {
-        if (children_.isEmpty()) {
-            return "Group has no children";
-        }
-
-        int brokenCount = 0;
-        for (const auto& child : children_) {
-            if (child->isBroken()) {
-                brokenCount++;
-            }
-        }
-
-        if (brokenCount > 0) {
-            return QString("Group has %1 broken child cue(s)").arg(brokenCount);
-        }
-
-        return QString();
-    }
-
     QJsonObject GroupCue::toJson() const
     {
         QJsonObject json = Cue::toJson();
 
-        json["mode"] = (mode_ == GroupMode::Sequential) ? "sequential" : "parallel";
-
+        // Save children as an array
         QJsonArray childrenArray;
         for (const auto& child : children_) {
-            childrenArray.append(child->toJson());
+            if (child) {
+                childrenArray.append(child->toJson());
+            }
         }
+
         json["children"] = childrenArray;
+        json["mode"] = groupModeToString(mode_);
 
         return json;
     }
@@ -250,100 +110,76 @@ namespace CueForge {
     {
         Cue::fromJson(json);
 
-        QString modeStr = json.value("mode").toString("sequential");
-        setMode(modeStr == "parallel" ? GroupMode::Parallel : GroupMode::Sequential);
+        // Clear existing children
+        children_.clear();
 
-        if (json.contains("children")) {
-            qDebug() << "GroupCue: Child deserialization needs CueFactory implementation";
+        // Load mode
+        QString modeStr = json["mode"].toString();
+        if (modeStr == "Sequential") {
+            mode_ = GroupMode::Sequential;
         }
-    }
-
-    std::unique_ptr<Cue> GroupCue::clone() const
-    {
-        auto cloned = std::make_unique<GroupCue>();
-
-        cloned->setNumber(number());
-        cloned->setName(name() + " (copy)");
-        cloned->setDuration(duration());
-        cloned->setPreWait(preWait());
-        cloned->setPostWait(postWait());
-        cloned->setContinueMode(continueMode());
-        cloned->setColor(color());
-        cloned->setNotes(notes());
-        cloned->setMode(mode_);
-
-        for (const auto& child : children_) {
-            auto childClone = child->clone();
-            if (childClone) {
-                cloned->addChild(std::shared_ptr<Cue>(childClone.release()));
-            }
+        else if (modeStr == "Simultaneous") {
+            mode_ = GroupMode::Simultaneous;
         }
 
-        return cloned;
+        // Note: Children will be loaded by CueManager in a second pass
     }
 
-    void GroupCue::executeNextChild()
+    void GroupCue::addChild(CuePtr child)
     {
-        currentChildIndex_++;
-
-        if (currentChildIndex_ >= children_.size()) {
-            setStatus(CueStatus::Finished);
-            emit executionFinished();
+        if (!child) {
             return;
         }
 
-        Cue* child = children_[currentChildIndex_].get();
-        if (!child->canExecute()) {
-            executeNextChild();
-            return;
-        }
+        children_.append(child);
+        child->setParent(this);
 
-        connect(child, &Cue::executionFinished, this, [this, child]() {
-            onChildFinished(child->id());
-            }, Qt::UniqueConnection);
-
-        activeChildren_.insert(child->id());
-        emit childExecutionStarted(child->id());
-
-        child->execute();
+        qDebug() << "Added child to group:" << child->number();
     }
 
-    void GroupCue::executeAllChildren()
+    Cue::CuePtr GroupCue::removeChild(int index)
     {
-        for (const auto& child : children_) {
-            if (!child->canExecute()) {
-                continue;
-            }
-
-            connect(child.get(), &Cue::executionFinished, this, [this, child]() {
-                onChildFinished(child->id());
-                }, Qt::UniqueConnection);
-
-            activeChildren_.insert(child->id());
-            emit childExecutionStarted(child->id());
-
-            child->execute();
+        if (index < 0 || index >= children_.size()) {
+            return CuePtr();
         }
 
-        if (activeChildren_.isEmpty()) {
-            setStatus(CueStatus::Finished);
-            emit executionFinished();
+        CuePtr child = children_.takeAt(index);
+
+        if (child) {
+            child->setParent(nullptr);
         }
+
+        return child;
     }
 
-    void GroupCue::onChildFinished(const QString& childId)
+    Cue* GroupCue::getChildAt(int index) const
     {
-        activeChildren_.remove(childId);
-        emit childExecutionFinished(childId);
-
-        if (mode_ == GroupMode::Sequential) {
-            executeNextChild();
+        if (index < 0 || index >= children_.size()) {
+            return nullptr;
         }
-        else {
-            if (activeChildren_.isEmpty()) {
-                setStatus(CueStatus::Finished);
-                emit executionFinished();
+
+        return children_[index].get();
+    }
+
+    void GroupCue::clearChildren()
+    {
+        for (auto& child : children_) {
+            if (child) {
+                child->setParent(nullptr);
             }
+        }
+        children_.clear();
+    }
+
+    QString GroupCue::groupModeToString(GroupMode mode) const
+    {
+        switch (mode) {
+        case GroupMode::Sequential:
+            return "Sequential";
+        case GroupMode::Simultaneous:
+            return "Simultaneous";
+        default:
+            return "Sequential";
         }
     }
 
