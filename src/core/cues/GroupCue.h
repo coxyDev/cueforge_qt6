@@ -23,13 +23,17 @@ namespace CueForge {
         explicit GroupCue(QObject* parent = nullptr);
         ~GroupCue() override = default;
 
-        // Cue interface - match base class signatures
-        bool execute() override;           // CHANGED: returns bool
-        void stop() override;
+        // Cue interface - MUST match base class signatures exactly
+        bool execute() override;
+        void stop(double fadeTime = 0.0) override;
         void pause() override;
         void resume() override;
+        bool canExecute() const override;          // ADD THIS
+        bool validate() override;                  // ADD THIS
+        QString validationError() const override;  // ADD THIS
         QJsonObject toJson() const override;
         void fromJson(const QJsonObject& json) override;
+        std::unique_ptr<Cue> clone() const override;  // ADD THIS
 
         // Group-specific methods
         void addChild(CuePtr child);

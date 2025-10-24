@@ -119,7 +119,7 @@ namespace CueForge {
 
         // ========== Execution Interface ==========
 
-        virtual bool execute();
+        virtual bool execute() = 0;
         virtual void stop(double fadeTime = 0.0);
         virtual void pause();
         virtual void resume();

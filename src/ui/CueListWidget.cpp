@@ -53,15 +53,34 @@ namespace CueForge {
         treeView_->setIndentation(20);
         treeView_->setUniformRowHeights(true);
         treeView_->setItemsExpandable(true);
-        treeView_->setExpandsOnDoubleClick(false); // We use double-click to execute
+        treeView_->setExpandsOnDoubleClick(false);
+        treeView_->setRootIsDecorated(true);
 
-        // Configure header
-        treeView_->header()->setStretchLastSection(true);
-        treeView_->header()->setSectionResizeMode(QHeaderView::Stretch);
+        // Configure header - ALL columns user-resizable
+        QHeaderView* header = treeView_->header();
+        header->setStretchLastSection(true);  // CHANGED: Last column stretches to fill
+        header->setSectionsMovable(false);     // Don't allow reordering columns
+        header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-        // Make rows taller for better readability
-        treeView_->setStyleSheet(treeView_->styleSheet() +
-            "QTreeView::item { height: 30px; padding: 2px; }");
+        // Make ALL columns fully interactive and resizable
+        header->setSectionResizeMode(CueTreeModel::ColumnNumber, QHeaderView::Interactive);
+        header->setSectionResizeMode(CueTreeModel::ColumnName, QHeaderView::Interactive);
+        header->setSectionResizeMode(CueTreeModel::ColumnDuration, QHeaderView::Interactive);
+        header->setSectionResizeMode(CueTreeModel::ColumnType, QHeaderView::Interactive);
+        header->setSectionResizeMode(CueTreeModel::ColumnStatus, QHeaderView::Interactive);
+
+        // Set default column widths (users can adjust ANY of these)
+        treeView_->setColumnWidth(CueTreeModel::ColumnNumber, 80);
+        treeView_->setColumnWidth(CueTreeModel::ColumnName, 250);   // Name gets more space by default
+        treeView_->setColumnWidth(CueTreeModel::ColumnDuration, 100);
+        treeView_->setColumnWidth(CueTreeModel::ColumnType, 100);
+        // Status column stretches to fill remaining space (due to setStretchLastSection)
+
+        // Set minimum widths to prevent columns from becoming too small
+        header->setMinimumSectionSize(50);
+
+        // Allow double-click on header divider to auto-resize column to contents
+        header->setSectionsClickable(true);
 
         layout_->addWidget(treeView_);
     }
@@ -76,6 +95,9 @@ namespace CueForge {
 
         connect(treeView_, &QTreeView::customContextMenuRequested,
             this, &CueListWidget::onContextMenuRequested);
+
+        connect(treeView_->header(), &QHeaderView::customContextMenuRequested,
+            this, &CueListWidget::onHeaderContextMenuRequested);
     }
 
     void CueListWidget::applyStyleSheet()
@@ -87,6 +109,8 @@ namespace CueForge {
             border: none;
             outline: none;
             font-size: 10pt;
+            gridline-color: #3c3c3c;
+            show-decoration-selected: 1;
         }
         
         QTreeView::item {
@@ -102,6 +126,10 @@ namespace CueForge {
         
         QTreeView::item:hover {
             background-color: #3a3a3a;
+        }
+        
+        QTreeView::item:alternate {
+            background-color: #2e2e2e;
         }
         
         QTreeView::branch {
@@ -120,27 +148,37 @@ namespace CueForge {
             image: none;
         }
         
-        QTreeView::branch:has-children:!has-siblings:closed::before,
-        QTreeView::branch:closed:has-children:has-siblings::before {
+        QTreeView::branch:has-children:closed::before {
             content: "▶";
             color: #888;
             font-size: 10pt;
+            padding-right: 4px;
         }
         
-        QTreeView::branch:open:has-children:!has-siblings::before,
-        QTreeView::branch:open:has-children:has-siblings::before {
+        QTreeView::branch:has-children:open::before {
             content: "▼";
             color: #888;
             font-size: 10pt;
+            padding-right: 4px;
         }
         
         QHeaderView::section {
             background-color: #3c3c3c;
             color: #e0e0e0;
-            padding: 6px;
+            padding: 8px 4px;
             border: none;
+            border-right: 1px solid #2b2b2b;
             border-bottom: 2px solid #4a90e2;
             font-weight: bold;
+            font-size: 10pt;
+        }
+        
+        QHeaderView::section:hover {
+            background-color: #4a4a4a;
+        }
+        
+        QHeaderView::section:first {
+            border-left: none;
         }
     )";
 
@@ -342,6 +380,41 @@ namespace CueForge {
         }
 
         menu.exec(treeView_->mapToGlobal(pos));
+    }
+
+    void CueListWidget::onHeaderContextMenuRequested(const QPoint& pos)
+    {
+        QMenu menu(this);
+        menu.setStyleSheet(R"(
+        QMenu {
+            background-color: #3c3c3c;
+            color: #e0e0e0;
+            border: 1px solid #555;
+        }
+        QMenu::item:selected {
+            background-color: #4a90e2;
+        }
+    )");
+
+        QAction* autoResize = menu.addAction("Auto-Resize All Columns");
+        QAction* resetWidths = menu.addAction("Reset Column Widths");
+
+        QAction* selected = menu.exec(treeView_->header()->mapToGlobal(pos));
+
+        if (selected == autoResize) {
+            // Auto-resize all columns to contents
+            for (int i = 0; i < CueTreeModel::ColumnCount; ++i) {
+                treeView_->resizeColumnToContents(i);
+            }
+        }
+        else if (selected == resetWidths) {
+            // Reset to default widths
+            treeView_->setColumnWidth(CueTreeModel::ColumnNumber, 80);
+            treeView_->setColumnWidth(CueTreeModel::ColumnName, 200);
+            treeView_->setColumnWidth(CueTreeModel::ColumnDuration, 100);
+            treeView_->setColumnWidth(CueTreeModel::ColumnType, 100);
+            treeView_->setColumnWidth(CueTreeModel::ColumnStatus, 100);
+        }
     }
 
 } // namespace CueForge

@@ -33,6 +33,7 @@ namespace CueForge {
         void onSelectionChanged();
         void onDoubleClicked(const QModelIndex& index);
         void onContextMenuRequested(const QPoint& pos);
+        void onHeaderContextMenuRequested(const QPoint& pos);
 
     private:
         void setupUI();

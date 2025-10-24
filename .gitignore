@@ -1,22 +1,46 @@
+# ============================================================================
+# CueForge .gitignore
+# ============================================================================
+
+# External Libraries (Download separately)
+external/JUCE/
+external/asiosdk/
+
 # Build directories
 build/
-build-*/
 cmake-build-*/
 out/
 
-# Qt Creator
-*.pro.user
-*.pro.user.*
-*.autosave
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.suo
+*.sln.docstates
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
 
 # CMake
+CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles/
-CMakeScripts/
 cmake_install.cmake
 install_manifest.txt
+compile_commands.json
 CTestTestfile.cmake
-Makefile
+_deps/
+
+# Qt
+*.autosave
+*.qmlc
+*.jsc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qm
+.qmake.stash
 
 # Compiled Object files
 *.slo
@@ -33,10 +57,6 @@ Makefile
 *.dylib
 *.dll
 
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
@@ -47,96 +67,36 @@ Makefile
 *.exe
 *.out
 *.app
-CueForge
-bin/
-lib/
 
-# Qt
-*.qm
-*.qrc.depends
-*.moc
-moc_*.cpp
-moc_*.h
-qrc_*.cpp
-ui_*.h
-*.autosave
-
-# Xcode
-*.xcodeproj/
-*.xcworkspace/
-*.pbxuser
-*.mode1v3
-*.mode2v3
-*.perspectivev3
-*.moved-aside
-DerivedData/
-build/
-
-# Visual Studio
-.vs/
-*.sln
-*.vcxproj
-*.vcxproj.filters
-*.vcxproj.user
-*.sdf
-*.opensdf
-*.suo
-*.user
-*.aps
-*.pch
-*.vspscc
-*.vssscc
-*.ncb
-*.bak
-*.tmp
-ipch/
-Debug/
-Release/
-x64/
-Win32/
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+CMakeLists.txt.user*
 
 # IDEs
-.vscode/
 .idea/
+*.iml
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
 *.swp
 *.swo
 *~
 
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Linux
-*~
-.directory
-
-# Logs
-*.log
-
-# Temp files
-*.tmp
-*.temp
+# Workspace files
+*.cueforge
 *.bak
-*.backup
 
-# User-specific files
-workspace.cueforge
-*.cueforge~
-user-settings.json
-
-# Documentation build
-docs/_build/
-docs/.doctrees/
-
-# Package managers
-node_modules/
-.npm
-.yarn/
-
-# Misc
-*.swp
-*~
-.*.swp
-.*.swo
+# Don't ignore external README
+!external/README.md

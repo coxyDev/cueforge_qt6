@@ -6,6 +6,7 @@
 #include "GroupCue.h"
 #include <QJsonArray>
 #include <QDebug>
+#include <QCoreApplication>
 
 namespace CueForge {
 
@@ -43,17 +44,17 @@ namespace CueForge {
         return true;
     }
 
-    void GroupCue::stop()
+    void GroupCue::stop(double fadeTime)  // FIXED: Added fadeTime parameter
     {
-        // Stop all children
+        // Stop all children with the same fade time
         for (auto& child : children_) {
             if (child && (child->status() == CueStatus::Running ||
                 child->status() == CueStatus::Paused)) {
-                child->stop();
+                child->stop(fadeTime);  // Pass fade time to children
             }
         }
 
-        setStatus(CueStatus::Idle);  // CHANGED: Back to Idle, not Stopped
+        setStatus(CueStatus::Idle);
     }
 
     void GroupCue::pause()
@@ -181,6 +182,79 @@ namespace CueForge {
         default:
             return "Sequential";
         }
+    }
+
+    bool GroupCue::canExecute() const
+    {
+        // Group can execute if it has children
+        return !children_.isEmpty();
+    }
+
+    bool GroupCue::validate()
+    {
+        // Group is valid if it has at least one child
+        if (children_.isEmpty()) {
+            setIsBroken(true);
+            return false;
+        }
+
+        // Also validate all children
+        bool allValid = true;
+        for (const auto& child : children_) {
+            if (child && !child->validate()) {
+                allValid = false;
+            }
+        }
+
+        setIsBroken(!allValid);
+        return allValid;
+    }
+
+    QString GroupCue::validationError() const
+    {
+        if (children_.isEmpty()) {
+            return tr("Group has no children");
+        }
+
+        // Check if any children are broken
+        for (const auto& child : children_) {
+            if (child && child->isBroken()) {
+                return tr("One or more children have errors");
+            }
+        }
+
+        return QString();
+    }
+
+    std::unique_ptr<Cue> GroupCue::clone() const
+    {
+        auto cloned = std::make_unique<GroupCue>();
+
+        // Copy base properties
+        cloned->setNumber(number());
+        cloned->setName(name() + " Copy");
+        cloned->setDuration(duration());
+        cloned->setPreWait(preWait());
+        cloned->setPostWait(postWait());
+        cloned->setContinueMode(continueMode());
+        cloned->setColor(color());
+        cloned->setNotes(notes());
+        cloned->setArmed(isArmed());
+
+        // Copy group-specific properties
+        cloned->setMode(mode_);
+
+        // Clone all children
+        for (const auto& child : children_) {
+            if (child) {
+                auto clonedChild = child->clone();
+                if (clonedChild) {
+                    cloned->addChild(CuePtr(clonedChild.release()));
+                }
+            }
+        }
+
+        return cloned;
     }
 
 } // namespace CueForge

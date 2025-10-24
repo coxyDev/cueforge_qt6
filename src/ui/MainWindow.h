@@ -33,6 +33,8 @@ namespace CueForge {
             QWidget* parent = nullptr);
         ~MainWindow() override;
 
+        AudioEngineQt* audioEngine() const { return audioEngine_; }
+
     protected:
         void closeEvent(QCloseEvent* event) override;
 
@@ -81,6 +83,8 @@ namespace CueForge {
         void applyStyleSheet();
         bool maybeSave();
         void updateWindowTitle();
+        
+        AudioEngineQt* audioEngine_;
 
         QPointer<CueManager> cueManager_;
         QPointer<ErrorHandler> errorHandler_;

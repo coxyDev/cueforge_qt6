@@ -103,7 +103,7 @@ namespace CueForge {
     int CueTreeModel::columnCount(const QModelIndex& parent) const
     {
         Q_UNUSED(parent);
-        return 1;
+        return ColumnCount;
     }
 
     QVariant CueTreeModel::data(const QModelIndex& index, int role) const
@@ -117,9 +117,24 @@ namespace CueForge {
             return QVariant();
         }
 
+        int column = index.column();
+
         switch (role) {
         case Qt::DisplayRole:
-            return QString("%1: %2").arg(cue->number(), cue->name());
+            switch (column) {
+            case ColumnNumber:
+                return cue->number();
+            case ColumnName:
+                return cue->name();
+            case ColumnDuration:
+                return QString("%1s").arg(cue->duration(), 0, 'f', 1);
+            case ColumnType:
+                return cueTypeToString(cue->type());
+            case ColumnStatus:
+                return cueStatusToString(cue->status());
+            default:
+                return QVariant();
+            }
 
         case NumberRole:
             return cue->number();
@@ -155,6 +170,11 @@ namespace CueForge {
             return cue->isBroken();
 
         case Qt::BackgroundRole: {
+            // Only apply to first column for tree structure visibility
+            if (column != ColumnNumber) {
+                return QVariant();
+            }
+
             // Standby cue gets special highlight
             if (cueManager_->standByCue() == cue) {
                 return QBrush(QColor(70, 130, 180, 80)); // Steel blue, semi-transparent
@@ -170,13 +190,10 @@ namespace CueForge {
                 return QBrush(QColor(255, 215, 0, 80)); // Gold
             }
 
-            // Normal cue background based on type
-            QColor baseColor = cue->color();
-            baseColor.setAlpha(40);
-            return QBrush(baseColor);
+            return QVariant();
         }
 
-        case Qt::ForegroundRole:
+        case Qt::ForegroundRole: {
             if (cue->isBroken()) {
                 return QBrush(QColor(255, 100, 100)); // Light red for broken
             }
@@ -184,21 +201,25 @@ namespace CueForge {
                 return QBrush(QColor(150, 150, 150)); // Gray for disarmed
             }
             return QBrush(QColor(240, 240, 240)); // Light gray text
+        }
 
         case Qt::FontRole: {
             QFont font;
             if (cueManager_->standByCue() == cue) {
                 font.setBold(true);
-                font.setPointSize(10);
             }
             if (cue->type() == CueType::Group) {
-                font.setPointSize(10);
                 font.setBold(true);
             }
             return font;
         }
 
         case Qt::DecorationRole: {
+            // Only show icons in first column
+            if (column != ColumnNumber) {
+                return QVariant();
+            }
+
             // Return emoji/icon based on cue type
             switch (cue->type()) {
             case CueType::Audio: return QString("🎵");
@@ -231,9 +252,31 @@ namespace CueForge {
 
     QVariant CueTreeModel::headerData(int section, Qt::Orientation orientation, int role) const
     {
-        if (role == Qt::DisplayRole && orientation == Qt::Horizontal && section == 0) {
-            return tr("Cue List");
+        if (orientation != Qt::Horizontal) {
+            return QVariant();
         }
+
+        if (role == Qt::DisplayRole) {
+            switch (section) {
+            case ColumnNumber:   return tr("Cue");
+            case ColumnName:     return tr("Name");
+            case ColumnDuration: return tr("Duration");
+            case ColumnType:     return tr("Type");
+            case ColumnStatus:   return tr("Status");
+            default:             return QVariant();
+            }
+        }
+
+        if (role == Qt::TextAlignmentRole) {
+            switch (section) {
+            case ColumnNumber:
+            case ColumnDuration:
+                return static_cast<int>(Qt::AlignCenter);
+            default:
+                return static_cast<int>(Qt::AlignLeft | Qt::AlignVCenter);
+            }
+        }
+
         return QVariant();
     }
 

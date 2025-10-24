@@ -18,6 +18,16 @@ namespace CueForge {
         Q_OBJECT
 
     public:
+
+        enum Columns {
+            ColumnNumber = 0,
+            ColumnName,
+            ColumnDuration,
+            ColumnType,
+            ColumnStatus,
+            ColumnCount
+        };
+
         enum CueRoles {
             NumberRole = Qt::UserRole + 1,
             NameRole,

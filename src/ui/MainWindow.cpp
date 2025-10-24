@@ -9,6 +9,7 @@
 #include "TransportWidget.h"
 #include "../core/CueManager.h"
 #include "../core/ErrorHandler.h"
+#include "../audio/AudioEngineQt.h"
 
 #include <QMenuBar>
 #include <QToolBar>
@@ -40,6 +41,20 @@ namespace CueForge {
         resize(1400, 900);
         setMinimumSize(1000, 600);
 
+        #ifdef HAVE_JUCE_AUDIO
+                audioEngine_ = new AudioEngineQt(this);
+                if (audioEngine_->initialize()) {
+                    qDebug() << "✓ Audio engine initialized";
+                    statusLabel_->setText("Audio engine ready");
+                }
+                else {
+                    qWarning() << "✗ Audio engine failed to initialize";
+                    statusLabel_->setText("Audio engine unavailable");
+                }
+        #else
+                qWarning() << "Built without JUCE audio support";
+        #endif
+
         createActions();
         createMenus();
         createToolBars();
@@ -56,6 +71,12 @@ namespace CueForge {
 
     MainWindow::~MainWindow()
     {
+        #ifdef HAVE_JUCE_AUDIO
+                if (audioEngine_) {
+                    audioEngine_->shutdown();
+                }
+        #endif
+
         saveSettings();
     }
 
