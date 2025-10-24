@@ -1,5 +1,5 @@
 // ============================================================================
-// MainWindow.h - Main application window (UPDATED)
+// MainWindow.h - Main application window
 // CueForge Qt6 - Professional show control software
 // ============================================================================
 
@@ -22,6 +22,7 @@ namespace CueForge {
     class CueListWidget;
     class InspectorWidget;
     class TransportWidget;
+    class AudioEngineQt;
 
     class MainWindow : public QMainWindow
     {
@@ -33,7 +34,9 @@ namespace CueForge {
             QWidget* parent = nullptr);
         ~MainWindow() override;
 
+#ifdef HAVE_JUCE_AUDIO
         AudioEngineQt* audioEngine() const { return audioEngine_; }
+#endif
 
     protected:
         void closeEvent(QCloseEvent* event) override;
@@ -83,8 +86,6 @@ namespace CueForge {
         void applyStyleSheet();
         bool maybeSave();
         void updateWindowTitle();
-        
-        AudioEngineQt* audioEngine_;
 
         QPointer<CueManager> cueManager_;
         QPointer<ErrorHandler> errorHandler_;
@@ -95,6 +96,12 @@ namespace CueForge {
 
         QDockWidget* inspectorDock_;
         QDockWidget* transportDock_;
+
+        // Toolbars
+        QToolBar* fileToolBar_;
+        QToolBar* editToolBar_;
+        QToolBar* cueToolBar_;
+        QToolBar* playbackToolBar_;
 
         // Actions - File
         QAction* actionNew_;
@@ -120,7 +127,7 @@ namespace CueForge {
         QAction* actionGroupSelection_;
         QAction* actionUngroupSelection_;
 
-        // Actions - Playback
+        // Actions - Transport
         QAction* actionGo_;
         QAction* actionStop_;
         QAction* actionPause_;
@@ -134,15 +141,15 @@ namespace CueForge {
         QAction* actionPreferences_;
         QAction* actionAbout_;
 
-        QToolBar* fileToolBar_;
-        QToolBar* editToolBar_;
-        QToolBar* cueToolBar_;
-        QToolBar* playbackToolBar_;
-
+        // Status bar
         QLabel* statusLabel_;
         QLabel* cueCountLabel_;
 
         QString currentFilePath_;
+
+#ifdef HAVE_JUCE_AUDIO
+        AudioEngineQt* audioEngine_;
+#endif
     };
 
 } // namespace CueForge

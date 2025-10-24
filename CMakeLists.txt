@@ -146,6 +146,8 @@ if(HAVE_JUCE)
         ${AUDIO_ENGINE_SOURCES}
         ${AUDIO_ENGINE_HEADERS}
         ${JUCE_MODULE_SOURCES}
+        "src/audio/JuceHeader.cpp"
+        "src/audio/JuceColourStub.cpp"
     )
     
     target_include_directories(CueForgeAudioEngine PUBLIC
@@ -221,7 +223,7 @@ endif()
 add_executable(CueForge 
     ${CUEFORGE_SOURCES}
     ${CUEFORGE_HEADERS}
-)
+ "src/audio/JuceHeader.cpp")
 
 target_include_directories(CueForge PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
