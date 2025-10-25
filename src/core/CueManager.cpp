@@ -5,6 +5,7 @@
 
 #include "CueManager.h"
 #include "cues/AudioCue.h"
+#include "../audio/AudioEngineQt.h"
 #include "cues/GroupCue.h"
 #include "cues/WaitCue.h"
 #include "cues/ControlCue.h"
@@ -19,8 +20,23 @@ CueManager::CueManager(QObject* parent)
     : QObject(parent)
     , standByCue_(nullptr)
     , hasUnsavedChanges_(false)
+	, audioEngine_(nullptr)
 {
     qDebug() << "CueManager initialized";
+}
+
+void CueManager::setAudioEngine(AudioEngineQt* engine)
+{
+    audioEngine_ = engine;
+
+    // Update any existing audio cues
+    for (int i = 0; i < cues_.size(); ++i) {
+        if (AudioCue* audioCue = qobject_cast<AudioCue*>(cues_[i].get())) {
+            audioCue->setAudioEngine(engine);
+        }
+    }
+
+    qDebug() << "CueManager: Audio engine connected";
 }
 
 // ============================================================================
@@ -32,8 +48,11 @@ Cue* CueManager::createCue(CueType type, int index)
     Cue* cue = nullptr;
     
     switch (type) {
-        case CueType::Audio:
-            cue = new AudioCue(this);
+        AudioCue* audioCue = new AudioCue(this);
+        if (audioEngine_) {
+            audioCue->setAudioEngine(audioEngine_);
+        }
+		cue = audioCue;
             break;
         case CueType::Group:
             cue = new GroupCue(this);

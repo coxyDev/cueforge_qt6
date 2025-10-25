@@ -18,6 +18,8 @@ namespace CueForge {
 
     class ErrorHandler;
 
+    class AudioEngineQt;
+
     class CueManager : public QObject
     {
         Q_OBJECT
@@ -30,6 +32,7 @@ namespace CueForge {
 
         // Cue creation and management
         Cue* createCue(CueType type, int index = -1);
+		void setAudioEngine(AudioEngineQt* engine);
         Cue::CuePtr removeChild(int index);
         bool removeCue(const QString& cueId);
         void removeCueWithoutSignals(const QString& cueId);
@@ -110,6 +113,7 @@ namespace CueForge {
         QList<QJsonObject> clipboard_;
         QString currentWorkspacePath_;
         bool hasUnsavedChanges_;
+        AudioEngineQt* audioEngine_;
     };
 
 } // namespace CueForge

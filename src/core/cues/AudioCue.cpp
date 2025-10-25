@@ -4,48 +4,55 @@
 // ============================================================================
 
 #include "AudioCue.h"
+#include "../../audio/AudioEngineQt.h"
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QFileInfo>
 #include <QDebug>
-#include <QtMath>
-#include <QTimer>
 
 namespace CueForge {
 
     AudioCue::AudioCue(QObject* parent)
-        : Cue(CueType::Audio, parent)
-        , volume_(1.0)
+        : Cue(parent)
+        , audioEngine_(nullptr)
+        , playerId_(-1)
+        , volume_(0.8)
         , pan_(0.0)
         , rate_(1.0)
         , startTime_(0.0)
         , endTime_(0.0)
-        , loopEnabled_(false)
-        , currentPosition_(0.0)
-        , isPlaying_(false)
+        , doFade_(false)
     {
-        setName("Audio Cue");
-        setColor(QColor(100, 150, 255));
+        setColor(QColor(100, 255, 150)); // QLab-style green
     }
 
-    void AudioCue::setFilePath(const QString& path)
+    AudioCue::~AudioCue()
     {
-        if (filePath_ == path) {
-            return;
+        // Clean up audio player if still active
+        if (audioEngine_ && playerId_ >= 0) {
+            audioEngine_->removePlayer(playerId_);
+            playerId_ = -1;
         }
+    }
 
-        filePath_ = path;
-        loadFileInfo();
+    void AudioCue::setAudioEngine(AudioEngineQt* engine)
+    {
+        audioEngine_ = engine;
+    }
 
-        if (fileInfo_.isValid) {
-            setDuration(fileInfo_.duration);
-            endTime_ = fileInfo_.duration;
-            setIsBroken(false);
+    void AudioCue::setFilePath(const QString& filePath)
+    {
+        if (filePath_ != filePath) {
+            filePath_ = filePath;
+            loadFileInfo();
+            updateModifiedTime();
+
+            // Update cue name if empty
+            if (name().isEmpty()) {
+                QFileInfo fileInfo(filePath);
+                setName(fileInfo.baseName());
+            }
         }
-        else {
-            setIsBroken(true);
-        }
-
-        updateModifiedTime();
-        emit filePathChanged(path);
     }
 
     void AudioCue::loadFileInfo()
@@ -57,85 +64,53 @@ namespace CueForge {
         }
 
         QFileInfo fileInfo(filePath_);
-        if (!fileInfo.exists()) {
-            qWarning() << "Audio file not found:" << filePath_;
+        if (!fileInfo.exists() || !fileInfo.isReadable()) {
+            qWarning() << "AudioCue: File not accessible:" << filePath_;
             return;
         }
 
-        fileInfo_.fileSize = fileInfo.size();
-        fileInfo_.format = fileInfo.suffix().toUpper();
-
-        QStringList audioExts = { "wav", "mp3", "aiff", "aif", "flac", "ogg", "m4a", "aac" };
-        if (audioExts.contains(fileInfo.suffix().toLower())) {
-            fileInfo_.isValid = true;
-            fileInfo_.channels = 2;
-            fileInfo_.sampleRate = 48000;
-            fileInfo_.duration = 10.0;
-            fileInfo_.bitDepth = 24;
-        }
-
-        qDebug() << "Loaded audio file info:" << filePath_
-            << "channels:" << fileInfo_.channels
-            << "duration:" << fileInfo_.duration;
+        // File exists - mark as valid
+        // Duration will be loaded when player is created
+        fileInfo_.isValid = true;
     }
 
     void AudioCue::setVolume(double volume)
     {
-        volume = qBound(0.0, volume, 2.0);
-
-        if (qAbs(volume_ - volume) > 0.001) {
+        volume = qBound(0.0, volume, 1.0);
+        if (!qFuzzyCompare(volume_, volume)) {
             volume_ = volume;
             updateModifiedTime();
-            emit volumeChanged(volume_);
-        }
-    }
 
-    double AudioCue::volumeDb() const
-    {
-        if (volume_ <= 0.0) {
-            return -96.0;
-        }
-        return 20.0 * qLn(volume_) / qLn(10.0);
-    }
-
-    void AudioCue::setVolumeDb(double db)
-    {
-        db = qBound(-96.0, db, 12.0);
-        if (db <= -96.0) {
-            setVolume(0.0);
-        }
-        else {
-            setVolume(qPow(10.0, db / 20.0));
+            // Update live player if active
+            if (audioEngine_ && playerId_ >= 0) {
+                audioEngine_->setVolume(playerId_, volume_);
+            }
         }
     }
 
     void AudioCue::setPan(double pan)
     {
         pan = qBound(-1.0, pan, 1.0);
-
-        if (qAbs(pan_ - pan) > 0.001) {
+        if (!qFuzzyCompare(pan_, pan)) {
             pan_ = pan;
             updateModifiedTime();
-            emit panChanged(pan_);
         }
     }
 
     void AudioCue::setRate(double rate)
     {
-        rate = qBound(0.1, rate, 4.0);
-
-        if (qAbs(rate_ - rate) > 0.001) {
+        rate = qBound(0.5, rate, 2.0);
+        if (!qFuzzyCompare(rate_, rate)) {
             rate_ = rate;
+            validateTrimPoints();
             updateModifiedTime();
-            emit rateChanged(rate_);
         }
     }
 
     void AudioCue::setStartTime(double seconds)
     {
         seconds = qMax(0.0, seconds);
-
-        if (qAbs(startTime_ - seconds) > 0.001) {
+        if (!qFuzzyCompare(startTime_, seconds)) {
             startTime_ = seconds;
             validateTrimPoints();
             updateModifiedTime();
@@ -144,17 +119,18 @@ namespace CueForge {
 
     void AudioCue::setEndTime(double seconds)
     {
-        if (qAbs(endTime_ - seconds) > 0.001) {
+        seconds = qMax(0.0, seconds);
+        if (!qFuzzyCompare(endTime_, seconds)) {
             endTime_ = seconds;
             validateTrimPoints();
             updateModifiedTime();
         }
     }
 
-    void AudioCue::setLoopEnabled(bool enabled)
+    void AudioCue::setDoFade(bool enabled)
     {
-        if (loopEnabled_ != enabled) {
-            loopEnabled_ = enabled;
+        if (doFade_ != enabled) {
+            doFade_ = enabled;
             updateModifiedTime();
         }
     }
@@ -226,144 +202,195 @@ namespace CueForge {
         }
     }
 
+    // ============================================================================
+    // Playback Control - THE CRITICAL CONNECTION
+    // ============================================================================
+
     bool AudioCue::execute()
     {
+        // Validation
         if (!canExecute()) {
+            qWarning() << "AudioCue::execute() - Cannot execute cue:" << number();
             return false;
         }
 
-        isPlaying_ = true;
-        currentPosition_ = startTime_;
-        setStatus(CueStatus::Running);
+        if (filePath_.isEmpty()) {
+            qWarning() << "AudioCue::execute() - No file path set";
+            return false;
+        }
 
-        qDebug() << "AudioCue execute:" << name() << filePath_;
+        if (!audioEngine_) {
+            qWarning() << "AudioCue::execute() - No audio engine connected!";
+            return false;
+        }
 
-        QTimer::singleShot(static_cast<int>(effectiveDuration() * 1000), this, [this]() {
-            if (isPlaying_) {
-                isPlaying_ = false;
-                setStatus(CueStatus::Finished);
-                emit executionFinished();
-            }
-            });
+        if (!audioEngine_->isInitialized()) {
+            qWarning() << "AudioCue::execute() - Audio engine not initialized";
+            return false;
+        }
+
+        // Clean up any existing player
+        if (playerId_ >= 0) {
+            audioEngine_->removePlayer(playerId_);
+            playerId_ = -1;
+        }
+
+        // Create new player and load file
+        qDebug() << "AudioCue::execute() - Creating player for:" << filePath_;
+        playerId_ = audioEngine_->createPlayer(filePath_);
+
+        if (playerId_ < 0) {
+            qWarning() << "AudioCue::execute() - Failed to create audio player";
+            return false;
+        }
+
+        // Get duration from engine
+        double loadedDuration = audioEngine_->getDuration(playerId_);
+        if (loadedDuration > 0.0) {
+            fileInfo_.duration = loadedDuration;
+            fileInfo_.isValid = true;
+            setDuration(loadedDuration);
+        }
+
+        // Apply playback settings
+        applyPlaybackSettings();
+
+        // Start playback
+        qDebug() << "AudioCue::execute() - Starting playback";
+        if (!audioEngine_->play(playerId_)) {
+            qWarning() << "AudioCue::execute() - Failed to start playback";
+            audioEngine_->removePlayer(playerId_);
+            playerId_ = -1;
+            return false;
+        }
+
+        // Update state
+        setState(CueState::Running);
+        qDebug() << "AudioCue::execute() - Successfully started cue" << number();
 
         return true;
     }
 
-    void AudioCue::stop(double fadeTime)
+    void AudioCue::stop()
     {
-        Q_UNUSED(fadeTime);
-
-        if (isPlaying_) {
-            isPlaying_ = false;
-            currentPosition_ = 0.0;
-            setStatus(CueStatus::Loaded);
-            qDebug() << "AudioCue stopped:" << name();
+        if (state() == CueState::Stopped) {
+            return;
         }
+
+        qDebug() << "AudioCue::stop() - Stopping cue" << number();
+
+        // Stop audio player
+        if (audioEngine_ && playerId_ >= 0) {
+            audioEngine_->stop(playerId_);
+            audioEngine_->removePlayer(playerId_);
+            playerId_ = -1;
+        }
+
+        // Update state
+        setState(CueState::Stopped);
     }
 
     void AudioCue::pause()
     {
-        if (isPlaying_) {
-            isPlaying_ = false;
-            setStatus(CueStatus::Paused);
-            qDebug() << "AudioCue paused:" << name();
+        if (state() != CueState::Running) {
+            return;
         }
+
+        qDebug() << "AudioCue::pause() - Pausing cue" << number();
+
+        // Pause audio player
+        if (audioEngine_ && playerId_ >= 0) {
+            audioEngine_->pause(playerId_);
+        }
+
+        // Update state
+        setState(CueState::Paused);
     }
 
     void AudioCue::resume()
     {
-        if (status() == CueStatus::Paused) {
-            isPlaying_ = true;
-            setStatus(CueStatus::Running);
-            qDebug() << "AudioCue resumed:" << name();
-        }
-    }
-
-    bool AudioCue::canExecute() const
-    {
-        return Cue::canExecute() && hasValidFile();
-    }
-
-    bool AudioCue::validate()
-    {
-        if (!hasValidFile()) {
-            return false;
+        if (state() != CueState::Paused) {
+            return;
         }
 
-        validateTrimPoints();
-        return true;
-    }
+        qDebug() << "AudioCue::resume() - Resuming cue" << number();
 
-    QString AudioCue::validationError() const
-    {
-        if (!hasValidFile()) {
-            if (filePath_.isEmpty()) {
-                return "No audio file assigned";
-            }
-            return "Audio file not found: " + filePath_;
+        // Resume audio player
+        if (audioEngine_ && playerId_ >= 0) {
+            audioEngine_->resume(playerId_);
         }
-        return QString();
+
+        // Update state
+        setState(CueState::Running);
     }
 
-    QJsonObject AudioCue::toJson() const
+    void AudioCue::applyPlaybackSettings()
     {
-        QJsonObject json = Cue::toJson();
+        if (!audioEngine_ || playerId_ < 0) {
+            return;
+        }
+
+        // Apply volume
+        audioEngine_->setVolume(playerId_, volume_);
+
+        // Apply start position if trimmed
+        if (startTime_ > 0.0) {
+            audioEngine_->setPosition(playerId_, startTime_);
+        }
+
+        // Note: Pan and rate will require additional engine support
+        // For now, volume and position are applied
+    }
+
+    // ============================================================================
+    // Serialization
+    // ============================================================================
+
+    void AudioCue::toJson(QJsonObject& json) const
+    {
+        Cue::toJson(json);
 
         json["filePath"] = filePath_;
         json["volume"] = volume_;
-        json["volumeDb"] = volumeDb();
         json["pan"] = pan_;
         json["rate"] = rate_;
         json["startTime"] = startTime_;
         json["endTime"] = endTime_;
-        json["loopEnabled"] = loopEnabled_;
-        json["matrixRouting"] = QJsonObject::fromVariantMap(matrixRouting_);
+        json["doFade"] = doFade_;
         json["audioOutputPatch"] = audioOutputPatch_;
 
-        return json;
+        // Matrix routing
+        if (!matrixRouting_.isEmpty()) {
+            QJsonObject routingObj;
+            for (auto it = matrixRouting_.constBegin(); it != matrixRouting_.constEnd(); ++it) {
+                routingObj[it.key()] = it.value().toDouble();
+            }
+            json["matrixRouting"] = routingObj;
+        }
     }
 
     void AudioCue::fromJson(const QJsonObject& json)
     {
         Cue::fromJson(json);
 
-        setFilePath(json.value("filePath").toString());
-        setVolume(json.value("volume").toDouble(1.0));
-        setPan(json.value("pan").toDouble(0.0));
-        setRate(json.value("rate").toDouble(1.0));
-        setStartTime(json.value("startTime").toDouble(0.0));
-        setEndTime(json.value("endTime").toDouble(0.0));
-        setLoopEnabled(json.value("loopEnabled").toBool(false));
+        setFilePath(json["filePath"].toString());
+        setVolume(json["volume"].toDouble(0.8));
+        setPan(json["pan"].toDouble(0.0));
+        setRate(json["rate"].toDouble(1.0));
+        setStartTime(json["startTime"].toDouble(0.0));
+        setEndTime(json["endTime"].toDouble(0.0));
+        setDoFade(json["doFade"].toBool(false));
+        setAudioOutputPatch(json["audioOutputPatch"].toString());
 
+        // Matrix routing
         if (json.contains("matrixRouting")) {
-            setMatrixRouting(json["matrixRouting"].toObject().toVariantMap());
+            QJsonObject routingObj = json["matrixRouting"].toObject();
+            QVariantMap routing;
+            for (auto it = routingObj.constBegin(); it != routingObj.constEnd(); ++it) {
+                routing[it.key()] = it.value().toDouble();
+            }
+            setMatrixRouting(routing);
         }
-        setAudioOutputPatch(json.value("audioOutputPatch").toString("main"));
-    }
-
-    std::unique_ptr<Cue> AudioCue::clone() const
-    {
-        auto cloned = std::make_unique<AudioCue>();
-
-        cloned->setNumber(number());
-        cloned->setName(name() + " (copy)");
-        cloned->setDuration(duration());
-        cloned->setPreWait(preWait());
-        cloned->setPostWait(postWait());
-        cloned->setContinueMode(continueMode());
-        cloned->setColor(color());
-        cloned->setNotes(notes());
-        cloned->setFilePath(filePath_);
-        cloned->setVolume(volume_);
-        cloned->setPan(pan_);
-        cloned->setRate(rate_);
-        cloned->setStartTime(startTime_);
-        cloned->setEndTime(endTime_);
-        cloned->setLoopEnabled(loopEnabled_);
-        cloned->setMatrixRouting(matrixRouting_);
-        cloned->setAudioOutputPatch(audioOutputPatch_);
-
-        return cloned;
     }
 
 } // namespace CueForge

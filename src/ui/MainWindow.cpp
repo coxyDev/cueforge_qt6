@@ -57,6 +57,8 @@ namespace CueForge {
                     qWarning() << "✗ Audio engine failed to initialize";
                     statusLabel_->setText("Audio engine unavailable");
                 }
+                cueManager_->setAudioEngine(audioEngine_);
+                qDebug() << "MainWindow: Connected audio engine to cue manager";
         #else
                 qWarning() << "Built without JUCE audio support";
         #endif
