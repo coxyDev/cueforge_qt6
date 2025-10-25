@@ -41,6 +41,12 @@ namespace CueForge {
         resize(1400, 900);
         setMinimumSize(1000, 600);
 
+        createActions();
+        createMenus();
+        createToolBars();
+        createDockWidgets();
+        createStatusBar();
+
         #ifdef HAVE_JUCE_AUDIO
                 audioEngine_ = new AudioEngineQt(this);
                 if (audioEngine_->initialize()) {
@@ -55,11 +61,6 @@ namespace CueForge {
                 qWarning() << "Built without JUCE audio support";
         #endif
 
-        createActions();
-        createMenus();
-        createToolBars();
-        createDockWidgets();
-        createStatusBar();
         setupConnections();
         applyStyleSheet();
         loadSettings();
