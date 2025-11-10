@@ -46,50 +46,68 @@ void CueManager::setAudioEngine(AudioEngineQt* engine)
 Cue* CueManager::createCue(CueType type, int index)
 {
     Cue* cue = nullptr;
-    
+
     switch (type) {
+    case CueType::Audio: {
         AudioCue* audioCue = new AudioCue(this);
         if (audioEngine_) {
             audioCue->setAudioEngine(audioEngine_);
         }
-		cue = audioCue;
-            break;
-        case CueType::Group:
-            cue = new GroupCue(this);
-            break;
-        case CueType::Wait:
-            cue = new WaitCue(this);
-            break;
-        case CueType::Start:
-        case CueType::Stop:
-        case CueType::Pause:
-        case CueType::Goto:
-            cue = new ControlCue(type, this);
-            break;
-        default:
-            qWarning() << "Unknown cue type";
-            return nullptr;
+        cue = audioCue;
+        break;
     }
-    
+    case CueType::Group:
+        cue = new GroupCue(this);
+        break;
+    case CueType::Wait:
+        cue = new WaitCue(this);
+        break;
+    case CueType::Start:
+        cue = new ControlCue(ControlCue::ControlType::Start, this);
+        break;
+    case CueType::Stop:
+        cue = new ControlCue(ControlCue::ControlType::Stop, this);
+        break;
+    case CueType::Goto:
+        cue = new ControlCue(ControlCue::ControlType::Goto, this);
+        break;
+    default:
+        qWarning() << "CueManager::createCue - Unsupported cue type";
+        return nullptr;
+    }
+
     if (!cue) {
         return nullptr;
     }
-    
-    // Insert at specified index or append
-    if (index < 0 || index >= cues_.size()) {
-        index = cues_.size();
-        cues_.append(Cue::CuePtr(cue));
-    } else {
-        cues_.insert(index, Cue::CuePtr(cue));
+
+    // Assign cue number
+    if (cue->number().isEmpty() || cue->number() == "1") {
+        cue->setNumber(generateCueNumber(index));
     }
-    
-    markUnsaved();
-    renumberAllCues();
-    
-    emit cueAdded(cue, index);
-    emit cueCountChanged(cues_.size());
-    
-    qDebug() << "Created cue:" << cue->number() << cue->name() << "at index" << index;
+
+    // Wrap in shared pointer
+    CuePtr cuePtr(cue);
+
+    // Insert at specified index
+    if (index >= 0 && index < cues_.size()) {
+        cues_.insert(index, cuePtr);
+    }
+    else {
+        cues_.append(cuePtr);
+    }
+
+    // Connect signals
+    connect(cue, &Cue::numberChanged, this, &CueManager::onCueUpdated);
+    connect(cue, &Cue::nameChanged, this, &CueManager::onCueUpdated);
+    connect(cue, &Cue::durationChanged, this, &CueManager::onCueUpdated);
+    connect(cue, &Cue::executionFinished, this, &CueManager::onCueFinished);
+
+    // Mark as changed
+    hasUnsavedChanges_ = true;
+    emit cueAdded(cue->id());
+
+    qDebug() << "CueManager: Created cue" << cue->number() << "-" << cue->name();
+
     return cue;
 }
 

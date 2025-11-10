@@ -48,6 +48,13 @@ namespace CueForge {
         AudioFileInfo fileInfo() const { return fileInfo_; }
         bool hasValidFile() const { return fileInfo_.isValid; }
 
+        // Cue interface overrides
+        bool execute() override;
+        void stop(double fadeTime = 0.0) override;
+        void pause() override;
+        void resume() override;
+        bool canExecute() const override;
+
         // Playback properties
         double volume() const { return volume_; }
         void setVolume(double volume);
@@ -124,6 +131,9 @@ namespace CueForge {
         QString audioOutputPatch_;
         double currentPosition_;
         bool isPlaying_;
+
+        protected:
+            void updateModifiedTime() { modifiedTime_ = QDateTime::currentDateTime(); }
     };
 
 } // namespace CueForge

@@ -13,7 +13,7 @@
 namespace CueForge {
 
     AudioCue::AudioCue(QObject* parent)
-        : Cue(parent)
+        : Cue(CueType::Audio, parent)
         , audioEngine_(nullptr)
         , playerId_(-1)
         , volume_(0.8)
@@ -21,7 +21,6 @@ namespace CueForge {
         , rate_(1.0)
         , startTime_(0.0)
         , endTime_(0.0)
-        , doFade_(false)
     {
         setColor(QColor(100, 255, 150)); // QLab-style green
     }
@@ -127,13 +126,6 @@ namespace CueForge {
         }
     }
 
-    void AudioCue::setDoFade(bool enabled)
-    {
-        if (doFade_ != enabled) {
-            doFade_ = enabled;
-            updateModifiedTime();
-        }
-    }
 
     double AudioCue::effectiveDuration() const
     {
@@ -264,16 +256,17 @@ namespace CueForge {
             return false;
         }
 
-        // Update state
-        setState(CueState::Running);
+        // Update status
+        setStatus(CueStatus::Running);
         qDebug() << "AudioCue::execute() - Successfully started cue" << number();
 
         return true;
     }
 
-    void AudioCue::stop()
+    void AudioCue::stop(double fadeTime)
     {
-        if (state() == CueState::Stopped) {
+        Q_UNUSED(fadeTime);
+        if (status() == CueStatus::Loaded) {
             return;
         }
 
@@ -286,13 +279,13 @@ namespace CueForge {
             playerId_ = -1;
         }
 
-        // Update state
-        setState(CueState::Stopped);
+        // Update status
+        setStatus(CueStatus::Stopped);
     }
 
     void AudioCue::pause()
     {
-        if (state() != CueState::Running) {
+        if (status() != CueStatus::Running) {
             return;
         }
 
@@ -303,13 +296,13 @@ namespace CueForge {
             audioEngine_->pause(playerId_);
         }
 
-        // Update state
-        setState(CueState::Paused);
+        // Update status
+        setStatus(CueStatus::Paused);
     }
 
     void AudioCue::resume()
     {
-        if (state() != CueState::Paused) {
+        if (status() != CueStatus::Paused) {
             return;
         }
 
@@ -320,8 +313,8 @@ namespace CueForge {
             audioEngine_->resume(playerId_);
         }
 
-        // Update state
-        setState(CueState::Running);
+        // Update status
+        setStatus(CueStatus::Running);
     }
 
     void AudioCue::applyPlaybackSettings()
@@ -356,7 +349,6 @@ namespace CueForge {
         json["rate"] = rate_;
         json["startTime"] = startTime_;
         json["endTime"] = endTime_;
-        json["doFade"] = doFade_;
         json["audioOutputPatch"] = audioOutputPatch_;
 
         // Matrix routing
@@ -379,7 +371,6 @@ namespace CueForge {
         setRate(json["rate"].toDouble(1.0));
         setStartTime(json["startTime"].toDouble(0.0));
         setEndTime(json["endTime"].toDouble(0.0));
-        setDoFade(json["doFade"].toBool(false));
         setAudioOutputPatch(json["audioOutputPatch"].toString());
 
         // Matrix routing
